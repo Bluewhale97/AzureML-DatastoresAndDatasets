@@ -156,9 +156,11 @@ You can use a script argument or a named input for a tabular dataset to pass dat
 First you need to save the script to the specified directory with the datasets that you will use, see the script:
 ```python
 from azureml.core import Run, Dataset
+import argparse
 
-parser.add_argument('--ds', type=str, dest='dataset_id')
-args = parser.parse_args()
+parser = argparse.ArgumentParser()
+parser.add_argument('--ds', type=str, dest='dataset_id', default='9947fd35-91cd-4dae-a587-c773dcbef9f0')
+args = parser.parse_args(args=[])
 
 run = Run.get_context()
 ws = run.experiment.workspace
@@ -187,7 +189,124 @@ run = experiment.submit(config=script_config)
 run.wait_for_completion(show_output=True)
 ```
 
-Wait a while, when the experiment has completed, review the run like this:
+If you submit it, wait a while, when the experiment has completed, review the run like this:
 
-![image](https://user-images.githubusercontent.com/71245576/116103730-dfc0a800-a67d-11eb-889f-4752024dbcbc.png)
+![image](https://user-images.githubusercontent.com/71245576/116154465-b1ab8a00-a6b6-11eb-8778-034598efc46b.png)
 
+I should notice you that you should use .py file, if you use .ipynb file it will occur a bug that said local execulation failed.
+
+Now let's use a named input for a tabular dataset:
+
+You can pass a tabular dataset as a named input. You in this approach use the as_named_input method of the dataset to specify a name for the dataset. Then in the script you can retrieve the dataset by name from the run context's input_datasets collection without needing to retrieve it from the workspace. If using this appraoach you still need to include a script argument for the dataset even though you do not actually use it to retrieve the dataset.
+
+See the script:
+```python
+from azureml.core import Run
+from azureml.core import Run, Dataset
+import azureml.core
+from azureml.core import Workspace, Dataset
+from azureml.core import Experiment, ScriptRunConfig, Environment
+from azureml.core.conda_dependencies import CondaDependencies
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--ds', type=str, dest='ds_id')
+args = parser.parse_args(args=[])
+
+run = Run.get_context()
+dataset = run.input_datasets['my_dataset']
+data = dataset.to_pandas_dataframe()
+```
+
+
+See the ScriptRunConfig:
+```python
+env = Environment('my_env')
+packages = CondaDependencies.create(conda_packages=['pip'],
+                                    pip_packages=['azureml-defaults',
+                                                  'azureml-dataprep[pandas]'])
+env.python.conda_dependencies = packages
+
+script_config = ScriptRunConfig(source_directory='my_dir',
+                                script='script.py',
+                                arguments=['--ds', tab_ds.as_named_input('my_dataset')],
+                                environment=env)
+```
+Submit and it will run a few seconds. Wait it for finishment.
+
+![image](https://user-images.githubusercontent.com/71245576/116158364-89268e80-a6bc-11eb-9700-03ac913c03ae.png)
+
+### 5.2 Passing file dataset to an experiment script
+
+There are also two approaches, either use a script argument or a named input. For using a script argument for a file dataset. Unlike with a tabular dataset you must specify a mode for the file dataset argument which can be as_download or as_mount. This provides an access point that the script can use to read the files in the dataset. 
+
+In most cases, you should use as_download, which copies the files to a temporary location on the compute where the script is being run. However, if you are working with a large amount of data for which there may not be enough storage space on the experiment compute, use as_mount to stream the files directly from their source.
+
+I found there are some bugs in the tutorial code, so I debugged and refined it:
+```python
+from azureml.core import Run
+import glob
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--ds', type=str, dest='ds_ref')
+args = parser.parse_args(args=[])
+run = Run.get_context()
+
+imgs = glob.glob("args.ds_ref +'/*.jpg'")
+```
+
+The congire file ScriptRunConfig:
+```python
+env = Environment('my_env')
+packages = CondaDependencies.create(conda_packages=['pip'],
+                                    pip_packages=['azureml-defaults',
+                                                  'azureml-dataprep[pandas]'])
+env.python.conda_dependencies = packages
+
+script_config = ScriptRunConfig(source_directory='my_dir',
+                                script='script.py',
+                                arguments=['--ds', file_ds.as_download()],
+                                environment=env)
+```
+
+Now let's use a named input for a file dataset:
+
+In this approach, you use the as_named_input method of the dataset to specify a name before specifying the access mode. Then in the script, you can retrieve the dataset by name from the run context's input_datasets collection and read the files from there. As with tabular datasets, if you use a named input, you still need to include a script argument for the dataset, even though you don’t actually use it to retrieve the dataset.
+
+The script has been refined(the script that the tutorial provided has bugs):
+
+```python
+from azureml.core import Run
+import glob
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--ds', type=str, dest='ds_ref')
+args = parser.parse_args()
+run = Run.get_context()
+
+dataset = run.input_datasets['my_ds']
+imgs= glob.glob("dataset + '/*.jpg'")
+```
+
+The configure file ScriptRunConfig:
+```python
+env = Environment('my_env')
+packages = CondaDependencies.create(conda_packages=['pip'],
+                                    pip_packages=['azureml-defaults',
+                                                  'azureml-dataprep[pandas]'])
+env.python.conda_dependencies = packages
+
+script_config = ScriptRunConfig(source_directory='my_dir',
+                                script='script.py',
+                                arguments=['--ds', file_ds.as_named_input('my_ds').as_download()],
+                                environment=env)
+```
+See it has completed:
+![image](https://user-images.githubusercontent.com/71245576/116160808-b2e1b480-a6c0-11eb-8d08-8a6a5152160e.png)
+
+
+## Reference:
+
+Build AI solutions with Azure Machine Learning, retrieved from https://docs.microsoft.com/en-us/learn/paths/build-ai-solutions-with-azure-ml-service/
