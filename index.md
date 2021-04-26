@@ -304,6 +304,7 @@ script_config = ScriptRunConfig(source_directory='my_dir',
                                 environment=env)
 ```
 See it has completed:
+
 ![image](https://user-images.githubusercontent.com/71245576/116160808-b2e1b480-a6c0-11eb-8d08-8a6a5152160e.png)
 
 
